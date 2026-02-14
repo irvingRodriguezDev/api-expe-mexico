@@ -135,8 +135,6 @@ exports.getTourById = async (req, res) => {
  */
 exports.getTourBySlug = async (req, res) => {
   try {
-    console.log(req.params.slug);
-
     const tour = await Tour.findOne({
       where: {
         slug: req.params.slug,
@@ -220,7 +218,7 @@ exports.deleteTour = async (req, res) => {
 exports.addMediaToTour = async (req, res) => {
   try {
     const { id } = req.params;
-    const { type, is_cover = false, order = 0 } = req.body;
+    const { cover_index = 0 } = req.body;
 
     // 1️⃣ Validar tour
     const tour = await Tour.findByPk(id);
@@ -228,35 +226,48 @@ exports.addMediaToTour = async (req, res) => {
       return res.status(404).json({ msg: "Tour no encontrado" });
     }
 
-    // 2️⃣ Validar archivo
-    if (!req.file) {
-      return res.status(400).json({ msg: "Archivo no enviado" });
+    // 2️⃣ Validar archivos
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ msg: "Debe subir al menos una imagen" });
     }
 
-    // 3️⃣ Subir a S3
-    const file = req.file;
-    const fileUrl = await uploadToS3("tours", file, id);
-    // ej: local/tours/1/imagen.jpg
-
-    if (!fileUrl) {
-      return res.status(500).json({ msg: "Error al subir archivo a S3" });
+    if (files.length > 4) {
+      return res.status(400).json({ msg: "Máximo 4 imágenes permitidas" });
     }
 
-    // 4️⃣ Si es portada, desactivar otras
-    if (is_cover) {
-      await TourMedia.update({ is_cover: false }, { where: { tour_id: id } });
+    // 3️⃣ Desactivar portadas previas
+    await TourMedia.update({ is_cover: false }, { where: { tour_id: id } });
+
+    // 4️⃣ Subir a S3 + preparar registros
+    const mediaData = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      const fileUrl = await uploadToS3("tours", file, id);
+
+      if (!fileUrl) {
+        return res.status(500).json({ msg: "Error al subir imagen a S3" });
+      }
+
+      mediaData.push({
+        tour_id: id,
+        type: "image",
+        url: fileUrl,
+        is_cover: Number(cover_index) === i,
+        order: i,
+      });
     }
 
     // 5️⃣ Guardar en BD
-    const media = await TourMedia.create({
-      tour_id: id,
-      type, // image | video
-      url: fileUrl,
-      is_cover,
-      order,
-    });
+    const media = await TourMedia.bulkCreate(mediaData);
 
-    return res.status(201).json(media);
+    return res.status(201).json({
+      msg: "Imágenes agregadas correctamente",
+      media,
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ msg: "Error al agregar multimedia" });
