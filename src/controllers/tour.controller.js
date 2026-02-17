@@ -1,3 +1,4 @@
+const getS3Url = require("../helpers/getS3Url");
 const { uploadToS3 } = require("../middlewares/uploadMedia");
 const { Tour, TourMedia } = require("../models");
 const { Op } = require("sequelize");
@@ -65,7 +66,7 @@ exports.getTours = async (req, res) => {
     // 📄 Paginación
     const offset = (page - 1) * limit;
 
-    const { rows: tours, count } = await Tour.findAndCountAll({
+    const { rows, count } = await Tour.findAndCountAll({
       where,
       include: [
         {
@@ -81,6 +82,24 @@ exports.getTours = async (req, res) => {
       order: [["created_at", order.toUpperCase()]],
       limit: parseInt(limit),
       offset,
+    });
+
+    // 🔥 NORMALIZACIÓN DE DATA (CLAVE)
+    const tours = rows.map((tour) => {
+      const t = tour.toJSON();
+
+      const media = t.media.map((m) => ({
+        ...m,
+        url: getS3Url(m.url),
+      }));
+
+      const cover = media.find((m) => m.is_cover) || media[0] || null;
+
+      return {
+        ...t,
+        media,
+        cover_image: cover?.url || null,
+      };
     });
 
     return res.json({
