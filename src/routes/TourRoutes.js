@@ -5,6 +5,7 @@ const authMiddleware = require("../middlewares/auth.middlewares");
 const { upload } = require("../middlewares/uploadMedia");
 // PUBLIC
 router.get("/", tourController.getTours);
+router.get("/latest", tourController.getLatestTours);
 router.get("/slug/:slug", tourController.getTourBySlug);
 // ADMIN
 router.post("/", authMiddleware, tourController.createTour);

@@ -113,6 +113,62 @@ exports.getTours = async (req, res) => {
     return res.status(500).json({ msg: "Error al obtener tours" });
   }
 };
+exports.getLatestTours = async (req, res) => {
+  try {
+    const where = {
+      status: "published",
+    };
+
+    const limit = 5;
+    const orderDirection = "DESC"; // últimos creados primero
+
+    const { rows, count } = await Tour.findAndCountAll({
+      where,
+      include: [
+        {
+          model: TourMedia,
+          as: "media",
+          separate: true,
+          order: [
+            ["is_cover", "DESC"],
+            ["order", "ASC"],
+          ],
+        },
+      ],
+      order: [["created_at", orderDirection]],
+      limit,
+    });
+
+    // 🔥 NORMALIZACIÓN DE DATA
+    const tours = rows.map((tour) => {
+      const t = tour.toJSON();
+
+      const media = t.media.map((m) => ({
+        ...m,
+        url: getS3Url(m.url),
+      }));
+
+      const cover = media.find((m) => m.is_cover) || media[0] || null;
+
+      return {
+        ...t,
+        media,
+        cover_image: cover?.url || null,
+      };
+    });
+
+    return res.json({
+      total: count,
+      limit,
+      tours,
+    });
+  } catch (error) {
+    console.error("getLatestTours error:", error);
+    return res.status(500).json({
+      msg: "Error al obtener los últimos tours",
+    });
+  }
+};
 
 /**
  * =========================
@@ -154,19 +210,19 @@ exports.getTourById = async (req, res) => {
  */
 exports.getTourBySlug = async (req, res) => {
   try {
+    const { slug } = req.params;
+
     const tour = await Tour.findOne({
       where: {
-        slug: req.params.slug,
+        slug,
         status: "published",
       },
       include: [
         {
           model: TourMedia,
           as: "media",
-          order: [
-            ["is_cover", "DESC"],
-            ["order", "ASC"],
-          ],
+          separate: true,
+          order: [["order", "ASC"]], // 👈 orden REAL
         },
       ],
     });
@@ -175,7 +231,27 @@ exports.getTourBySlug = async (req, res) => {
       return res.status(404).json({ msg: "Tour no encontrado" });
     }
 
-    return res.json(tour);
+    const t = tour.toJSON();
+
+    // 🔥 normalizamos urls
+    let media = t.media.map((m) => ({
+      ...m,
+      url: getS3Url(m.url),
+    }));
+
+    // 🧠 solo validación defensiva (no reordenamos)
+    media = media.filter(
+      (m) => Number.isInteger(m.order) && m.order >= 0 && m.order <= 3
+    );
+
+    // ✅ identificamos portada (sin alterar orden)
+    const coverMedia = media.find((m) => m.is_cover === true);
+
+    return res.json({
+      ...t,
+      media, // 👈 TODAS, ordenadas 0 → 3
+      cover_image: coverMedia?.url || null,
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ msg: "Error al obtener el tour" });
@@ -247,7 +323,6 @@ exports.addMediaToTour = async (req, res) => {
 
     // 2️⃣ Validar archivos
     const files = req.files;
-
     if (!files || files.length === 0) {
       return res.status(400).json({ msg: "Debe subir al menos una imagen" });
     }
@@ -259,33 +334,40 @@ exports.addMediaToTour = async (req, res) => {
     // 3️⃣ Desactivar portadas previas
     await TourMedia.update({ is_cover: false }, { where: { tour_id: id } });
 
-    // 4️⃣ Subir a S3 + preparar registros
-    const mediaData = [];
+    const createdMedia = [];
 
+    // 4️⃣ Crear registros primero (SIN URL)
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+      const media = await TourMedia.create({
+        tour_id: id,
+        type: "image",
+        url: "media", // 👈 se actualiza después
+        is_cover: Number(cover_index) === i,
+        order: i, // 👈 0–3 garantizado
+      });
 
-      const fileUrl = await uploadToS3("tours", file, id);
+      // 5️⃣ Subir imagen usando el ID REAL del media
+      const fileUrl = await uploadToS3(
+        "tours",
+        files[i],
+        `${id}/${media.id}` // 👈 clave ÚNICA
+      );
 
       if (!fileUrl) {
+        await media.destroy();
         return res.status(500).json({ msg: "Error al subir imagen a S3" });
       }
 
-      mediaData.push({
-        tour_id: id,
-        type: "image",
-        url: fileUrl,
-        is_cover: Number(cover_index) === i,
-        order: i,
-      });
-    }
+      // 6️⃣ Actualizar URL final
+      media.url = fileUrl;
+      await media.save();
 
-    // 5️⃣ Guardar en BD
-    const media = await TourMedia.bulkCreate(mediaData);
+      createdMedia.push(media);
+    }
 
     return res.status(201).json({
       msg: "Imágenes agregadas correctamente",
-      media,
+      media: createdMedia,
     });
   } catch (error) {
     console.error(error);
