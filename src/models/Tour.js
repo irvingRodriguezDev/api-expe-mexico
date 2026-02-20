@@ -51,6 +51,10 @@ const Tour = sequelize.define(
       type: DataTypes.STRING(80),
       allowNull: true, // ej: aventura, cultural, naturaleza
     },
+    date: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+    },
 
     tags: {
       type: DataTypes.JSON,
