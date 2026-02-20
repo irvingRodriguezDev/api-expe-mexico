@@ -1,6 +1,5 @@
 require("dotenv").config();
 process.env.TZ = "America/Mexico_City";
-
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -27,6 +26,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api", require("./routes"));
+app.use(require("./middlewares/multerHandleError"));
+
 app.use((req, res) => {
   res.status(404).json({ msg: "Ruta no encontrada" });
 });

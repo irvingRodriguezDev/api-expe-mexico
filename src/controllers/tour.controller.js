@@ -12,10 +12,35 @@ const { Op } = require("sequelize");
 exports.createTour = async (req, res) => {
   try {
     const tour = await Tour.create(req.body);
-    return res.status(201).json(tour);
+
+    return res.status(201).json({
+      message: "Tour creado correctamente",
+      tour,
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ msg: "Error al crear el tour" });
+    console.error("Create tour error:", error);
+
+    // Error de validación Sequelize
+    if (error.name === "SequelizeValidationError") {
+      return res.status(400).json({
+        message: "Datos inválidos",
+        errors: error.errors.map((e) => ({
+          field: e.path,
+          message: e.message,
+        })),
+      });
+    }
+
+    // Error de constraint (unique, foreign key, etc.)
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        message: "El tour ya existe",
+      });
+    }
+
+    return res.status(500).json({
+      message: "Error interno al crear el tour",
+    });
   }
 };
 
@@ -40,7 +65,7 @@ exports.getTours = async (req, res) => {
     } = req.query;
 
     const where = {
-      status: "published",
+      status: "Publicado",
     };
 
     // 🔍 Búsqueda general
@@ -116,7 +141,7 @@ exports.getTours = async (req, res) => {
 exports.getLatestTours = async (req, res) => {
   try {
     const where = {
-      status: "published",
+      status: "Publicado",
     };
 
     const limit = 5;
@@ -181,7 +206,7 @@ exports.getTourById = async (req, res) => {
     const tour = await Tour.findOne({
       where: {
         id: req.params.id,
-        status: "published",
+        status: "Publicado",
       },
       include: [
         {
@@ -215,7 +240,7 @@ exports.getTourBySlug = async (req, res) => {
     const tour = await Tour.findOne({
       where: {
         slug,
-        status: "published",
+        status: "Publicado",
       },
       include: [
         {

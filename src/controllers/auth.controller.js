@@ -85,3 +85,55 @@ exports.me = async (req, res) => {
     });
   }
 };
+exports.updatePassword = async (req, res) => {
+  try {
+    const { email, password, password_confirmation } = req.body;
+
+    // 1️⃣ Validaciones básicas
+    if (!email || !password || !password_confirmation) {
+      return res.status(400).json({
+        message: "Email, password y password_confirmation son requeridos",
+      });
+    }
+
+    if (password !== password_confirmation) {
+      return res.status(400).json({
+        message: "Las contraseñas no coinciden",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        message: "La contraseña debe tener al menos 8 caracteres",
+      });
+    }
+
+    // 2️⃣ Buscar usuario
+    const user = await User.findOne({
+      where: { email },
+    });
+
+    if (!user || !user.is_active) {
+      return res.status(404).json({
+        message: "Usuario no encontrado",
+      });
+    }
+
+    // 3️⃣ Hashear nueva contraseña
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 4️⃣ Actualizar contraseña
+    user.password = hashedPassword;
+    await user.save();
+
+    // 5️⃣ Respuesta
+    return res.status(200).json({
+      message: "Contraseña actualizada correctamente",
+    });
+  } catch (error) {
+    console.error("Update password error:", error);
+    return res.status(500).json({
+      message: "Error interno al actualizar la contraseña",
+    });
+  }
+};

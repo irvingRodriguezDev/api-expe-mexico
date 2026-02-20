@@ -22,7 +22,7 @@ const Tour = sequelize.define(
     },
 
     short_description: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.TEXT,
       allowNull: true,
     },
 
@@ -43,7 +43,7 @@ const Tour = sequelize.define(
     },
 
     location: {
-      type: DataTypes.STRING(120),
+      type: DataTypes.TEXT,
       allowNull: false, // ej: "Trosten", "CDMX"
     },
 
@@ -63,8 +63,8 @@ const Tour = sequelize.define(
     },
 
     status: {
-      type: DataTypes.ENUM("draft", "published"),
-      defaultValue: "draft",
+      type: DataTypes.ENUM("Borrador", "Publicado"),
+      defaultValue: "Borrador",
     },
   },
   {
