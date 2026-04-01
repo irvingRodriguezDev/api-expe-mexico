@@ -34,7 +34,7 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 3000;
 
 sequelize
-  .sync({ alter: false })
+  .sync({ alter: true })
   .then(async () => {
     await seedAdmin();
     console.log("Base de datos sincorinizada");
