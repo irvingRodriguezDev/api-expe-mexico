@@ -1,5 +1,5 @@
 import * as QuotationService from "../services/quotation.service.js";
-
+import { sendQuotationEmail } from "../helpers/QuotationEmailHelper.js"; // Modifica la ruta según tu arquitectura
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function sendError(res, err) {
@@ -54,11 +54,23 @@ export async function getQuotationById(req, res) {
 export async function updateQuotationStatus(req, res) {
   try {
     const { status, totalPrice, expiresAt } = req.body;
+
+    // 1. Actualiza el registro en la base de datos
     const quotation = await QuotationService.updateQuotationStatus(
       req.params.id,
       status,
       { totalPrice, expiresAt }
     );
+
+    // 2. Si el estatus pasa a ser "sent" (Enviada), detonamos el correo con Resend
+    if (status === "sent") {
+      // Disparamos el proceso en segundo plano para no demorar la respuesta de la API hacia el Admin
+      sendQuotationEmail(quotation).catch((mailErr) => {
+        console.error("Error asíncrono enviando el correo:", mailErr);
+      });
+    }
+
+    // 3. Retorna la respuesta inmediata al panel administrativo
     return res.json({ ok: true, data: quotation });
   } catch (err) {
     return sendError(res, err);
